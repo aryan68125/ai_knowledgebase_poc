@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from app.core.index_store import INDEX_STORE
 from app.core.logger import ATHENA_LOGGER
 from app.models.enums import SourceType
 from app.models.query_models import RetrievalChunk, RetrievalRequest, RetrievalResult
@@ -26,6 +27,7 @@ class Retriever:
                 message="Retrieval started",
                 extra={"query": request.query},
             )
+            corpus = self._active_corpus()
             query_tokens = self._tokenize(request.query)
             if not query_tokens:
                 ATHENA_LOGGER.warning(
@@ -38,9 +40,9 @@ class Retriever:
                 return RetrievalResult(chunks=[])
 
             scored_chunks: list[tuple[float, RetrievalChunk]] = []
-            total_chunks = len(self._corpus)
+            total_chunks = len(corpus)
 
-            for position, chunk in enumerate(self._corpus):
+            for position, chunk in enumerate(corpus):
                 chunk_tokens = self._tokenize(chunk.excerpt)
                 semantic_score = self._semantic_score(query_tokens, chunk_tokens)
                 keyword_score = self._keyword_score(request.query, chunk.excerpt)
@@ -85,6 +87,83 @@ class Retriever:
                 extra={"query": request.query, "error": str(exc)},
             )
             raise Exception(f"[Retriever.retrieve] {str(exc)}") from exc
+
+    def _active_corpus(self) -> list[RetrievalChunk]:
+        """Return indexed corpus when available, otherwise fallback seed corpus."""
+
+        try:
+            indexed_chunks = self._indexed_corpus()
+            if indexed_chunks:
+                ATHENA_LOGGER.info(
+                    module="app.rag.retriever",
+                    class_name="Retriever",
+                    method="_active_corpus",
+                    message="Using indexed corpus for retrieval",
+                    extra={"indexed_chunks": len(indexed_chunks)},
+                )
+                return indexed_chunks
+
+            ATHENA_LOGGER.warning(
+                module="app.rag.retriever",
+                class_name="Retriever",
+                method="_active_corpus",
+                message="Indexed corpus empty; falling back to seed corpus",
+                extra={"seed_chunks": len(self._corpus)},
+            )
+            return self._corpus
+        except Exception as exc:
+            ATHENA_LOGGER.error(
+                module="app.rag.retriever",
+                class_name="Retriever",
+                method="_active_corpus",
+                message="Failed to resolve active retrieval corpus",
+                extra={"error": str(exc)},
+            )
+            raise Exception(f"[Retriever._active_corpus] {str(exc)}") from exc
+
+    def _indexed_corpus(self) -> list[RetrievalChunk]:
+        """Build retrieval chunks from shared indexed records."""
+
+        try:
+            records = INDEX_STORE.all_records()
+            chunks: list[RetrievalChunk] = []
+            for record in records:
+                source_type_raw = str(record.get("source_type", ""))
+                text = str(record.get("text", "")).strip()
+                source_name = str(record.get("source_name", "")).strip()
+                if not source_type_raw or not text or not source_name:
+                    continue
+
+                try:
+                    source_type = SourceType(source_type_raw)
+                except Exception:
+                    continue
+
+                chunks.append(
+                    RetrievalChunk(
+                        source_type=source_type,
+                        source_name=source_name,
+                        excerpt=text,
+                    )
+                )
+
+            ATHENA_LOGGER.debug(
+                module="app.rag.retriever",
+                class_name="Retriever",
+                method="_indexed_corpus",
+                message="Built indexed corpus view",
+                extra={"indexed_records": len(records), "usable_chunks": len(chunks)},
+            )
+            return chunks
+        except Exception as exc:
+            ATHENA_LOGGER.error(
+                module="app.rag.retriever",
+                class_name="Retriever",
+                method="_indexed_corpus",
+                message="Failed to build indexed corpus view",
+                extra={"error": str(exc)},
+            )
+            raise Exception(f"[Retriever._indexed_corpus] {str(exc)}") from exc
 
     def _build_default_corpus(self) -> list[RetrievalChunk]:
         """Build deterministic seed chunks for retrieval behavior."""

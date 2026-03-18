@@ -29,6 +29,7 @@ Authentication is intentionally deferred. Implement auth only after explicit use
 ## Change Log
 | Date | Change | Files | Notes |
 | --- | --- | --- | --- |
+| 2026-03-18 | Added ingestion-to-retrieval shared index integration | `indexing_pipeline.py` | Pipeline-indexed chunks are now consumed by retriever via shared core index store |
 | 2026-03-18 | Added automatic ingestion scheduler runtime | `automation.py` | Added periodic ingestion scheduler and enable/disable runtime wrapper with structured logging |
 | 2026-03-18 | Implemented ingestion indexing pipeline orchestration | `indexing_pipeline.py`, `connectors.py` | Added connector fetch normalization and end-to-end pipeline execution with structured logs |
 | 2026-03-18 | Added explicit integration exception wrapping | `connectors.py` | Applied required exception format for connector integration boundaries |

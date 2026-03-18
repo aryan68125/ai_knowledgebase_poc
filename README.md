@@ -20,7 +20,7 @@ Authentication is intentionally deferred and not implemented yet.
 High-level flow:
 1. API receives a user query.
 2. Service orchestrates the retrieval-first pipeline.
-3. RAG retriever runs deterministic hybrid ranking over an in-memory corpus.
+3. RAG retriever runs deterministic hybrid ranking over indexed chunks (seed fallback when index is empty).
 4. Command builds a deterministic answer from retrieved context only.
 5. API returns a standardized response model.
 
@@ -100,6 +100,8 @@ The ingestion pipeline currently runs deterministic seed connector data and exec
 2. Chunk generation (`ChunkDocumentCommand`)
 3. Index upsert (`IndexChunksCommand`)
 4. Flow summary (`RunIngestionIndexingCommand`)
+
+Indexed chunks are stored in a shared in-memory core index store and are consumed by the retriever.
 
 Automatic ingestion:
 - Scheduler is created in FastAPI lifespan startup.

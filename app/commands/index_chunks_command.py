@@ -5,14 +5,14 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from app.commands.base_command import BaseCommand
+from app.core.index_store import INDEX_STORE
 from app.core.logger import ATHENA_LOGGER
-from app.models.ingestion_models import IndexedChunk, IndexingRequest, IndexingResult
+from app.models.ingestion_models import IndexingRequest, IndexingResult
 
 
 class IndexChunksCommand(BaseCommand[IndexingRequest, IndexingResult]):
     """Upsert chunks into a deterministic in-memory index."""
 
-    _index_store: dict[str, IndexedChunk] = {}
     _index_name: str = "knowledgebase_in_memory_index"
 
     def execute(self, input_model: IndexingRequest) -> IndexingResult:
@@ -27,13 +27,13 @@ class IndexChunksCommand(BaseCommand[IndexingRequest, IndexingResult]):
                 extra={"incoming_chunks": len(input_model.chunks)},
             )
 
-            for chunk in input_model.chunks:
-                self._index_store[chunk.chunk_id] = chunk
+            records = [chunk.model_dump(mode="json") for chunk in input_model.chunks]
+            total_index_size = INDEX_STORE.upsert_many(records=records)
 
             result = IndexingResult(
                 index_name=self._index_name,
                 indexed_count=len(input_model.chunks),
-                total_index_size=len(self._index_store),
+                total_index_size=total_index_size,
                 last_indexed_at=datetime.now(timezone.utc),
             )
 
@@ -63,10 +63,10 @@ class IndexChunksCommand(BaseCommand[IndexingRequest, IndexingResult]):
     def clear_index(cls) -> None:
         """Reset in-memory index store for tests and deterministic runs."""
 
-        cls._index_store.clear()
+        INDEX_STORE.clear()
         ATHENA_LOGGER.info(
             module="app.commands.index_chunks_command",
             class_name="IndexChunksCommand",
             method="clear_index",
-            message="Index store cleared",
+            message="Index store cleared through command API",
         )
