@@ -10,8 +10,8 @@ Current implementation includes a working backend scaffold with:
 - strict layered architecture (`api -> services -> commands -> rag -> ingestion -> models -> core`)
 - typed Pydantic contracts
 - standardized API response envelope
-- deterministic retrieval placeholder behavior
-- connector placeholders for ingestion sources
+- deterministic retrieval behavior with hybrid ranking
+- ingestion indexing pipeline (connector fetch -> chunking -> indexing)
 
 Authentication is intentionally deferred and not implemented yet.
 
@@ -20,12 +20,15 @@ Authentication is intentionally deferred and not implemented yet.
 High-level flow:
 1. API receives a user query.
 2. Service orchestrates the retrieval-first pipeline.
-3. RAG retriever returns relevant chunks (currently placeholder empty set).
+3. RAG retriever runs deterministic hybrid ranking over an in-memory corpus.
 4. Command builds a deterministic answer from retrieved context only.
 5. API returns a standardized response model.
 
 When no evidence is retrieved, the system returns:
 - `"I don't know based on available information"`
+
+For known project-domain queries (for example, onboarding runbooks), retrieval returns
+citations from matched chunks.
 
 ## Project Structure
 
@@ -34,6 +37,7 @@ When no evidence is retrieved, the system returns:
 - `app/commands/` business logic via command classes
 - `app/rag/` retrieval and context assembly components
 - `app/ingestion/` connector and ingestion placeholders
+- `app/ingestion/` connectors and indexing pipeline orchestration
 - `app/logs/` runtime JSON log files
 - `app/models/` shared Pydantic models and enums
 - `app/core/` configuration and centralized logging
@@ -85,6 +89,26 @@ Current keys:
 - `LOG_LEVEL`
 - `LOG_DIR`
 - `LOG_FILE_NAME`
+
+## Ingestion Indexing Pipeline (Chunking + Index Command Flow)
+
+The ingestion pipeline currently runs deterministic seed connector data and executes:
+1. Connector fetch (Teams, SharePoint, Jira)
+2. Chunk generation (`ChunkDocumentCommand`)
+3. Index upsert (`IndexChunksCommand`)
+4. Flow summary (`RunIngestionIndexingCommand`)
+
+Run it manually:
+
+```bash
+python - <<'PY'
+from app.ingestion.indexing_pipeline import IngestionIndexingPipeline
+from app.models.enums import ConnectorMode
+
+result = IngestionIndexingPipeline().run(mode=ConnectorMode.FULL)
+print(result.model_dump())
+PY
+```
 
 ## Manual API Testing with Swagger (FastAPI)
 

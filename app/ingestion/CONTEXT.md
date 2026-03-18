@@ -19,7 +19,8 @@ Own data connector, preprocessing, chunking, and indexing workflows for knowledg
 | --- | --- | --- | --- |
 | `CONTEXT.md` | Folder context and change tracking | `docs/AGENTS.md`, ingestion docs | Active |
 | `__init__.py` | Ingestion package marker | Python runtime | Active |
-| `connectors.py` | Connector base class and source connector placeholders | `app/models/enums.py`, `app/core/logger.py` | Active |
+| `connectors.py` | Connector base class and deterministic source document fetchers | `app/models/enums.py`, `app/models/ingestion_models.py`, `app/core/logger.py` | Active |
+| `indexing_pipeline.py` | Pipeline orchestration for connector fetch + chunk/index command flow | `app/ingestion/connectors.py`, `app/commands/run_ingestion_indexing_command.py` | Active |
 
 ## Auth Note
 Authentication is intentionally deferred. Implement auth only after explicit user instruction in chat.
@@ -27,6 +28,7 @@ Authentication is intentionally deferred. Implement auth only after explicit use
 ## Change Log
 | Date | Change | Files | Notes |
 | --- | --- | --- | --- |
+| 2026-03-18 | Implemented ingestion indexing pipeline orchestration | `indexing_pipeline.py`, `connectors.py` | Added connector fetch normalization and end-to-end pipeline execution with structured logs |
 | 2026-03-18 | Added explicit integration exception wrapping | `connectors.py` | Applied required exception format for connector integration boundaries |
 | 2026-03-18 | Added initial ingestion scaffold files | `__init__.py`, `connectors.py` | Added connector interfaces/placeholders for Teams, SharePoint, and Jira |
 | 2026-03-18 | Initialized ingestion folder context tracker | `CONTEXT.md` | Prepared connector/indexing tracking |

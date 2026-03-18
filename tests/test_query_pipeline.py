@@ -7,7 +7,9 @@ from pydantic import ValidationError
 
 from app.api.query_api import query_endpoint
 from app.commands.generate_answer_command import GenerateAnswerCommand, GenerateAnswerInput
+from app.models.query_models import RetrievalRequest
 from app.models.response_models import BaseResponse
+from app.rag.retriever import Retriever
 from app.services.query_service import QueryService
 
 
@@ -43,6 +45,26 @@ def test_query_service_returns_standard_base_response_shape() -> None:
     assert response.status == status.HTTP_200_OK
     assert isinstance(response.message, str)
     assert set(response.data.keys()) == {"summary", "detailed_explanation", "sources"}
+
+
+def test_retriever_returns_results_for_known_domain_query() -> None:
+    """Retriever should return at least one chunk for known project-domain topics."""
+
+    retriever: Retriever = Retriever()
+    retrieval_result = retriever.retrieve(request=RetrievalRequest(query="onboarding runbooks"))
+
+    assert len(retrieval_result.chunks) > 0
+
+
+def test_query_service_returns_citations_for_known_domain_query() -> None:
+    """Service response should include citations when retrieval finds evidence."""
+
+    service: QueryService = QueryService()
+    response: BaseResponse = service.answer_user_query(query="Where are onboarding runbooks stored?")
+
+    assert response.status == status.HTTP_200_OK
+    assert len(response.data["sources"]) > 0
+    assert response.data["summary"] != "I don't know based on available information"
 
 
 def test_query_api_endpoint_returns_base_response_payload() -> None:
