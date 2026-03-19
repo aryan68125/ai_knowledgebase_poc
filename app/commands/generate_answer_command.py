@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -158,14 +159,17 @@ class GenerateAnswerCommand(BaseCommand[GenerateAnswerInput, QueryAnswer]):
     ) -> tuple[str, str]:
         """Parse LLM output into response contract fields."""
 
-        try:
-            parsed = json.loads(llm_output)
-            if isinstance(parsed, dict):
-                summary = str(parsed.get("summary", "")).strip()
-                detailed_explanation = str(parsed.get("detailed_explanation", "")).strip()
-                if summary and detailed_explanation:
-                    return summary, detailed_explanation
-        except Exception:
+        cleaned_output = self._strip_reasoning_text(llm_output)
+        parsed = self._extract_json_object(cleaned_output)
+        if parsed is not None:
+            summary = self._strip_reasoning_text(str(parsed.get("summary", ""))).strip()
+            detailed_explanation = self._strip_reasoning_text(
+                str(parsed.get("detailed_explanation", ""))
+            ).strip()
+            if summary and detailed_explanation:
+                return summary, detailed_explanation
+
+        if parsed is None:
             ATHENA_LOGGER.debug(
                 module="app.commands.generate_answer_command",
                 class_name="GenerateAnswerCommand",
@@ -173,12 +177,65 @@ class GenerateAnswerCommand(BaseCommand[GenerateAnswerInput, QueryAnswer]):
                 message="LLM response is not strict JSON; using text fallback parser",
             )
 
-        normalized_text = " ".join(llm_output.split()).strip()
+        normalized_text = " ".join(cleaned_output.split()).strip()
         if normalized_text:
             summary = normalized_text[:220]
-            return summary, llm_output
+            return summary, cleaned_output
 
         return "Answer generated from retrieved internal sources", "\n".join(fallback_detail_lines)
+
+    def _extract_json_object(self, text: str) -> dict[str, object] | None:
+        """Extract best-effort JSON object from model output text."""
+
+        for candidate in self._json_candidates(text):
+            try:
+                parsed = json.loads(candidate)
+                if isinstance(parsed, dict):
+                    ATHENA_LOGGER.debug(
+                        module="app.commands.generate_answer_command",
+                        class_name="GenerateAnswerCommand",
+                        method="_extract_json_object",
+                        message="Extracted JSON object from LLM output",
+                    )
+                    return parsed
+            except Exception:
+                continue
+        return None
+
+    def _json_candidates(self, text: str) -> list[str]:
+        """Build candidate JSON substrings from raw response text."""
+
+        candidates: list[str] = []
+        stripped = text.strip()
+        if stripped:
+            candidates.append(stripped)
+
+        fenced_blocks = re.findall(
+            r"```(?:json)?\s*(.*?)\s*```",
+            text,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        for block in fenced_blocks:
+            block_text = block.strip()
+            if block_text:
+                candidates.append(block_text)
+
+        first_brace = text.find("{")
+        last_brace = text.rfind("}")
+        if first_brace != -1 and last_brace != -1 and first_brace < last_brace:
+            brace_slice = text[first_brace : last_brace + 1].strip()
+            if brace_slice:
+                candidates.append(brace_slice)
+
+        return candidates
+
+    def _strip_reasoning_text(self, text: str) -> str:
+        """Remove chain-of-thought tags and markdown fences from model output."""
+
+        without_think = re.sub(r"<think>.*?</think>", "", text, flags=re.IGNORECASE | re.DOTALL)
+        without_fences = re.sub(r"```(?:json)?", "", without_think, flags=re.IGNORECASE)
+        without_fences = without_fences.replace("```", "")
+        return without_fences.strip()
 
 
 class _HuggingFaceClientProtocol(Protocol):

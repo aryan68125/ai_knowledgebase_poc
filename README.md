@@ -26,12 +26,70 @@ You will see explicit comments in code where default wiring was switched to stat
 
 1. API receives a user query.
 2. Service triggers retriever + answer command.
-3. Retrieval runs over indexed chunks.
+3. Retrieval runs over indexed chunks stored in local vector DB (Qdrant local mode by default).
 4. Index is built from static connectors:
    - `LocalChatDataConnector`
    - `LocalDocumentsConnector`
 5. `GenerateAnswerCommand` calls Hugging Face DeepSeek-R1 when configured.
 6. If HF call fails (for example missing token), deterministic fallback formatting is used so the app remains available.
+
+## Retriever Under The Hood
+
+The retriever is not a single lookup; it is a staged ranking pipeline:
+
+1. Query normalization (tokenization + stopword removal + light singular normalization).
+2. Vector candidate pull from vector DB.
+3. Intent-aware enrichment:
+   - for cost/billing questions, lexical candidates are added from in-memory index records.
+4. Hybrid scoring of each candidate:
+   - semantic overlap
+   - keyword overlap
+   - recency prior
+   - source trust prior
+   - intent-specific signals (for cost queries: currency/cost signal + compactness bias)
+5. Top 3 chunks are forwarded to answer generation.
+
+### Retrieval Flow Diagram
+
+```mermaid
+flowchart TD
+    A[User Query] --> B[Tokenizer + Normalizer]
+    B --> C[Vector Search in Qdrant/InMemory]
+    B --> D{Cost/Billing Intent?}
+    D -- Yes --> E[Lexical Candidate Scan from INDEX_STORE]
+    D -- No --> F[Skip Lexical Enrichment]
+    C --> G[Merge + Deduplicate Candidates]
+    E --> G
+    F --> G
+    G --> H[Hybrid Scoring]
+    H --> I[Top 3 Retrieval Chunks]
+    I --> J[GenerateAnswerCommand]
+```
+
+### Hybrid Scoring Diagram
+
+```mermaid
+flowchart LR
+    A[Candidate Chunk] --> B[Semantic Overlap]
+    A --> C[Keyword Overlap]
+    A --> D[Recency Prior]
+    A --> E[Source Trust]
+    A --> F[Intent Signals]
+    F --> F1[Cost/Currency Signal]
+    F --> F2[Compactness Bias]
+    B --> G[Final Weighted Score]
+    C --> G
+    D --> G
+    E --> G
+    F1 --> G
+    F2 --> G
+```
+
+### Why This Helps Cloud-Cost Questions
+
+- Cost queries often need numeric facts (for example `$18,200/month`).
+- Pure vector similarity can miss those short factual snippets.
+- The lexical enrichment + cost-signal scoring path increases precision for these direct-fact prompts.
 
 ## Project Structure
 
@@ -98,6 +156,26 @@ print(result.model_dump())
 PY
 ```
 
+## Local Vector DB (Qdrant)
+
+The project uses a local, file-backed vector database by default:
+- Provider: `qdrant_local`
+- Storage path: `app/vector_db/qdrant`
+- Collection: `knowledgebase_chunks`
+
+Relevant `.env` keys:
+- `VECTOR_DB_PROVIDER` (`qdrant_local` or `inmemory`)
+- `VECTOR_DB_PATH`
+- `VECTOR_DB_COLLECTION_NAME`
+- `VECTOR_DB_DIMENSION`
+- `VECTOR_DB_TOP_K`
+
+If you want a clean index, remove local artifacts and re-run indexing:
+
+```bash
+rm -rf app/vector_db/qdrant
+```
+
 ## Environment Variables (`.env`)
 
 Core:
@@ -126,6 +204,13 @@ Hugging Face / LLM:
 - `HF_TIMEOUT_SECONDS`
 - `HF_MAX_TOKENS`
 - `HF_TEMPERATURE`
+
+Vector DB:
+- `VECTOR_DB_PROVIDER`
+- `VECTOR_DB_PATH`
+- `VECTOR_DB_COLLECTION_NAME`
+- `VECTOR_DB_DIMENSION`
+- `VECTOR_DB_TOP_K`
 
 Legacy integration config (kept for future reactivation):
 - `TEAMS_*` keys remain in config but are not default pipeline sources right now.

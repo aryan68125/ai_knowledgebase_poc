@@ -1,4 +1,4 @@
-"""Command to upsert chunks into an in-memory index store."""
+"""Command to upsert chunks into configured vector-store provider."""
 
 from __future__ import annotations
 
@@ -7,13 +7,13 @@ from datetime import datetime, timezone
 from app.commands.base_command import BaseCommand
 from app.core.index_store import INDEX_STORE
 from app.core.logger import ATHENA_LOGGER
+from app.core.text_embedder import TEXT_EMBEDDER
+from app.core.vector_store import VECTOR_STORE
 from app.models.ingestion_models import IndexingRequest, IndexingResult
 
 
 class IndexChunksCommand(BaseCommand[IndexingRequest, IndexingResult]):
-    """Upsert chunks into a deterministic in-memory index."""
-
-    _index_name: str = "knowledgebase_in_memory_index"
+    """Upsert chunk vectors and metadata into configured vector store."""
 
     def execute(self, input_model: IndexingRequest) -> IndexingResult:
         """Index chunks and return indexing summary."""
@@ -28,10 +28,12 @@ class IndexChunksCommand(BaseCommand[IndexingRequest, IndexingResult]):
             )
 
             records = [chunk.model_dump(mode="json") for chunk in input_model.chunks]
-            total_index_size = INDEX_STORE.upsert_many(records=records)
+            vectors = [TEXT_EMBEDDER.embed(chunk.text) for chunk in input_model.chunks]
+            total_index_size = VECTOR_STORE.upsert_many(records=records, vectors=vectors)
+            INDEX_STORE.upsert_many(records=records)
 
             result = IndexingResult(
-                index_name=self._index_name,
+                index_name=VECTOR_STORE.index_name,
                 indexed_count=len(input_model.chunks),
                 total_index_size=total_index_size,
                 last_indexed_at=datetime.now(timezone.utc),
@@ -61,12 +63,13 @@ class IndexChunksCommand(BaseCommand[IndexingRequest, IndexingResult]):
 
     @classmethod
     def clear_index(cls) -> None:
-        """Reset in-memory index store for tests and deterministic runs."""
+        """Reset configured vector store for tests and deterministic runs."""
 
+        VECTOR_STORE.clear()
         INDEX_STORE.clear()
         ATHENA_LOGGER.info(
             module="app.commands.index_chunks_command",
             class_name="IndexChunksCommand",
             method="clear_index",
-            message="Index store cleared through command API",
+            message="Vector store and lexical index store cleared through command API",
         )

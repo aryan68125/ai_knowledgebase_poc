@@ -17,3 +17,6 @@ venv/
 
 # Runtime logs
 app/logs/*.log
+
+# Local vector DB files
+app/vector_db/

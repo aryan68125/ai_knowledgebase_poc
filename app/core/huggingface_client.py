@@ -104,6 +104,8 @@ class HuggingFaceChatClient:
                 "Use ONLY the context below to answer the question.\n"
                 "If context is insufficient, explicitly say you do not know.\n"
                 "Return JSON with keys: summary, detailed_explanation.\n\n"
+                "Output must be raw JSON only (no markdown fences, no <think> tags, "
+                "and no extra commentary).\n\n"
                 f"Question:\n{query}\n\n"
                 f"Context:\n{context_block}"
             )

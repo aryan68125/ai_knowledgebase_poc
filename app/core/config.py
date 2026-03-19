@@ -50,6 +50,11 @@ class Settings(BaseModel):
     hf_timeout_seconds: int = Field(default=60, ge=1, le=180)
     hf_max_tokens: int = Field(default=700, ge=64, le=4096)
     hf_temperature: float = Field(default=0.2, ge=0.0, le=2.0)
+    vector_db_provider: str = Field(default="qdrant_local")
+    vector_db_path: str = Field(default="app/vector_db/qdrant")
+    vector_db_collection_name: str = Field(default="knowledgebase_chunks")
+    vector_db_dimension: int = Field(default=384, ge=16, le=4096)
+    vector_db_top_k: int = Field(default=8, ge=1, le=50)
 
     @classmethod
     def from_env(cls, search_path: Path | str | None = None) -> "Settings":
@@ -231,6 +236,31 @@ class Settings(BaseModel):
                 "HF_TEMPERATURE",
                 default=os.getenv("HF_TEMPERATURE", "0.2"),
                 cast=float,
+            ),
+            vector_db_provider=decouple_config(
+                "VECTOR_DB_PROVIDER",
+                default=os.getenv("VECTOR_DB_PROVIDER", "qdrant_local"),
+                cast=str,
+            ).lower(),
+            vector_db_path=decouple_config(
+                "VECTOR_DB_PATH",
+                default=os.getenv("VECTOR_DB_PATH", "app/vector_db/qdrant"),
+                cast=str,
+            ),
+            vector_db_collection_name=decouple_config(
+                "VECTOR_DB_COLLECTION_NAME",
+                default=os.getenv("VECTOR_DB_COLLECTION_NAME", "knowledgebase_chunks"),
+                cast=str,
+            ),
+            vector_db_dimension=decouple_config(
+                "VECTOR_DB_DIMENSION",
+                default=os.getenv("VECTOR_DB_DIMENSION", "384"),
+                cast=int,
+            ),
+            vector_db_top_k=decouple_config(
+                "VECTOR_DB_TOP_K",
+                default=os.getenv("VECTOR_DB_TOP_K", "8"),
+                cast=int,
             ),
         )
 

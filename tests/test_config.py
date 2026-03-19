@@ -47,6 +47,11 @@ def test_settings_from_env_reads_values_from_dotenv_file(tmp_path: Path) -> None
                 "HF_TIMEOUT_SECONDS=45",
                 "HF_MAX_TOKENS=512",
                 "HF_TEMPERATURE=0.2",
+                "VECTOR_DB_PROVIDER=qdrant_local",
+                "VECTOR_DB_PATH=app/vector_db/qdrant",
+                "VECTOR_DB_COLLECTION_NAME=kb_test_vectors",
+                "VECTOR_DB_DIMENSION=256",
+                "VECTOR_DB_TOP_K=6",
             ]
         ),
         encoding="utf-8",
@@ -87,3 +92,8 @@ def test_settings_from_env_reads_values_from_dotenv_file(tmp_path: Path) -> None
     assert settings.hf_timeout_seconds == 45
     assert settings.hf_max_tokens == 512
     assert settings.hf_temperature == 0.2
+    assert settings.vector_db_provider == "qdrant_local"
+    assert settings.vector_db_path == "app/vector_db/qdrant"
+    assert settings.vector_db_collection_name == "kb_test_vectors"
+    assert settings.vector_db_dimension == 256
+    assert settings.vector_db_top_k == 6
