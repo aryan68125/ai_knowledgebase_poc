@@ -33,20 +33,59 @@ def _build_document(text: str, document_id: str = "doc-1") -> IngestionDocument:
     )
 
 
-def test_chunk_document_command_splits_text_with_overlap() -> None:
-    """Chunk command should split text by token size and preserve overlap."""
+def test_chunk_document_command_single_para_under_limit() -> None:
+    """A document with one paragraph under the max should produce exactly one chunk."""
 
     command = ChunkDocumentCommand()
-    document = _build_document("word1 word2 word3 word4 word5 word6 word7 word8 word9 word10")
+    document = _build_document("word1 word2 word3 word4 word5")
 
     result = command.execute(
-        ChunkingRequest(document=document, chunk_size_tokens=5, chunk_overlap_tokens=2)
+        ChunkingRequest(document=document, chunk_size_tokens=10, chunk_overlap_tokens=2)
     )
 
-    assert len(result.chunks) == 3
-    assert result.chunks[0].token_count == 5
-    assert result.chunks[1].text.startswith("word4 word5")
-    assert result.chunks[2].chunk_id == "doc-1-chunk-3"
+    assert len(result.chunks) == 1
+    assert result.chunks[0].text == "word1 word2 word3 word4 word5"
+    assert result.chunks[0].chunk_id == "doc-1-chunk-1"
+
+
+def test_chunk_document_command_aggregates_small_paragraphs() -> None:
+    """Document with two small paragraphs under the limit should produce one aggregated chunk."""
+
+    command = ChunkDocumentCommand()
+    paragraph_a = "sentence one. sentence two."
+    paragraph_b = "sentence three. sentence four."
+    document = _build_document(f"{paragraph_a}\n\n{paragraph_b}")
+
+    result = command.execute(
+        ChunkingRequest(document=document, chunk_size_tokens=100, chunk_overlap_tokens=0)
+    )
+
+    assert len(result.chunks) == 1
+    assert result.chunks[0].text == f"{paragraph_a} {paragraph_b}"
+
+
+def test_chunk_document_command_overlap_respects_token_limit() -> None:
+    """Overlap words from chunk N should appear in chunk N+1, without exceeding chunk limit."""
+
+    command = ChunkDocumentCommand()
+    # 6 words total
+    text = "alpha beta gamma delta epsilon zeta"
+    document = _build_document(text)
+
+    # Max 4 words per chunk, 2 words overlap
+    result = command.execute(
+        ChunkingRequest(document=document, chunk_size_tokens=4, chunk_overlap_tokens=2)
+    )
+
+    # Chunks should be exactly max 4 words:
+    # 1: alpha beta gamma delta (4 words)
+    # 2: gamma delta epsilon zeta (4 words)
+    
+    assert len(result.chunks) == 2
+    assert result.chunks[0].text == "alpha beta gamma delta"
+    assert result.chunks[1].text == "gamma delta epsilon zeta"
+    assert result.chunks[0].token_count == 4
+    assert result.chunks[1].token_count == 4
 
 
 def test_index_chunks_command_upserts_and_tracks_total_index_size() -> None:

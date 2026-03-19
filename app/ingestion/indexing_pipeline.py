@@ -7,8 +7,7 @@ from app.core.logger import ATHENA_LOGGER
 from app.ingestion.connectors import (
     BaseConnector,
     JiraConnector,
-    LocalChatDataConnector,
-    LocalDocumentsConnector,
+    LocalDirectoryConnector,
     SharePointConnector,
     TeamsConnector,
 )
@@ -30,14 +29,14 @@ class IngestionIndexingPipeline:
         # Until that point, the active default path is static local data ingestion.
         #
         # self._connectors = connectors or [TeamsConnector(), SharePointConnector(), JiraConnector()]
-        self._connectors = connectors or [LocalChatDataConnector(), LocalDocumentsConnector()]
+        self._connectors = connectors or [LocalDirectoryConnector()]
         self._run_command = run_command or RunIngestionIndexingCommand()
 
     def run(
         self,
         mode: ConnectorMode,
-        chunk_size_tokens: int = 600,
-        chunk_overlap_tokens: int = 80,
+        chunk_size_tokens: int = 1000,
+        chunk_overlap_tokens: int = 100,
     ) -> IngestionIndexingResult:
         """Execute ingestion fetch + chunking + indexing flow."""
 

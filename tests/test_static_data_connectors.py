@@ -1,21 +1,22 @@
-"""Tests for local static chat/document ingestion connectors."""
+"""Tests for local directory ingestion connector."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 from app.core.config import Settings
-from app.ingestion.connectors import LocalChatDataConnector, LocalDocumentsConnector
+from app.ingestion.connectors import LocalDirectoryConnector
 from app.models.enums import ConnectorMode, SourceType
 
 
-def test_local_chat_connector_loads_all_chat_json_messages() -> None:
-    """Local chat connector should ingest messages from all chat_data JSON files."""
+def test_local_directory_connector_loads_chat_json() -> None:
+    """Connector should ingest messages from all chat_data JSON files."""
 
-    connector = LocalChatDataConnector(
+    connector = LocalDirectoryConnector(
         settings=Settings().model_copy(
             update={
-                "static_chat_data_dir": "app/data/chat_data",
+                "data_base_dir": "app/data",
+                "data_scan_directories": ["chat_data"],
                 "static_project_key": "KB",
                 "static_confidentiality": "internal",
             }
@@ -28,16 +29,17 @@ def test_local_chat_connector_loads_all_chat_json_messages() -> None:
     assert expected_file_count > 0
     assert len(result.documents) >= expected_file_count
     assert all(doc.metadata.source_type == SourceType.TEAMS for doc in result.documents)
-    assert all("Local Chat Data /" in doc.metadata.source_name for doc in result.documents)
+    assert all("Local Data / chat_data" in doc.metadata.source_name for doc in result.documents)
 
 
-def test_local_documents_connector_loads_all_docx_documents() -> None:
-    """Local documents connector should ingest text from every .docx in documents folder."""
+def test_local_directory_connector_loads_docx_documents() -> None:
+    """Connector should ingest text from every .docx in documents folder."""
 
-    connector = LocalDocumentsConnector(
+    connector = LocalDirectoryConnector(
         settings=Settings().model_copy(
             update={
-                "static_documents_dir": "app/data/documents",
+                "data_base_dir": "app/data",
+                "data_scan_directories": ["documents"],
                 "static_project_key": "KB",
                 "static_confidentiality": "internal",
             }

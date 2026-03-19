@@ -77,8 +77,8 @@ def test_generate_answer_command_falls_back_when_hf_call_fails() -> None:
         GenerateAnswerInput(query="Summarize rollout risk", retrieved_chunks=_sample_chunks())
     )
 
-    assert output.summary == "Answer generated from retrieved internal sources"
-    assert "The team discussed scaling pain" in output.detailed_explanation
+    assert output.summary == "Relevant context retrieved from Knowledgebase"
+    assert "Found 2 relevant documents. However, the AI reasoning engine is currently offline" in output.detailed_explanation
     assert len(output.sources) == 2
     assert client.calls == 1
 
@@ -93,7 +93,7 @@ def test_generate_answer_command_disables_hf_calls_when_flag_is_off() -> None:
         GenerateAnswerInput(query="Summarize rollout risk", retrieved_chunks=_sample_chunks())
     )
 
-    assert output.summary == "Answer generated from retrieved internal sources"
+    assert output.summary == "Relevant context retrieved from Knowledgebase"
     assert client.calls == 0
 
 
@@ -147,9 +147,33 @@ def test_generate_answer_command_strips_think_and_parses_fenced_json() -> None:
 
     assert output.summary == "I do not know"
     assert output.detailed_explanation == "No cloud cost information exists in retrieved context."
+    assert output.model_thinking == "This is hidden reasoning."
     assert "<think>" not in output.summary
     assert "<think>" not in output.detailed_explanation
     assert "```" not in output.detailed_explanation
+
+
+def test_generate_answer_command_strips_think_inside_json_values() -> None:
+    """Command should extract think tags even when they are illegally inside JSON values."""
+
+    client = _StubHuggingFaceClient(
+        response_text=json.dumps(
+            {
+                "summary": "<think>Thinking about summary...</think>The summary",
+                "detailed_explanation": "<think>Thinking about details...</think>The details",
+            }
+        )
+    )
+    command = GenerateAnswerCommand(hf_client=client, hf_enabled=True)
+
+    output = command.execute(
+        GenerateAnswerInput(query="Query", retrieved_chunks=_sample_chunks())
+    )
+
+    assert output.summary == "The summary"
+    assert output.detailed_explanation == "The details"
+    assert "Thinking about summary..." in str(output.model_thinking)
+    assert "Thinking about details..." in str(output.model_thinking)
 
 
 def test_generate_answer_command_strips_think_in_text_fallback_mode() -> None:
@@ -168,5 +192,6 @@ def test_generate_answer_command_strips_think_in_text_fallback_mode() -> None:
     )
 
     assert output.summary.startswith("Cloud cost cannot be determined")
+    assert output.model_thinking == "Ignore this chain-of-thought."
     assert "<think>" not in output.summary
     assert "<think>" not in output.detailed_explanation

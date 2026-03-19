@@ -23,7 +23,7 @@ def test_query_service_uses_ingested_chunks_after_pipeline_run() -> None:
 
     assert response.status == 200
     assert len(response.data["sources"]) > 0
-    assert response.data["summary"] == "Answer generated from retrieved internal sources"
+    assert isinstance(response.data["summary"], str) and len(response.data["summary"]) > 0
     assert any(
         ("Local Chat Data /" in source) or ("Local Documents /" in source)
         for source in response.data["sources"]

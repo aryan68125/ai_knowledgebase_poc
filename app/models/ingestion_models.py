@@ -55,8 +55,8 @@ class ChunkingRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     document: IngestionDocument
-    chunk_size_tokens: int = Field(default=600, ge=1, le=1200)
-    chunk_overlap_tokens: int = Field(default=80, ge=0, le=400)
+    chunk_size_tokens: int = Field(default=1000, ge=1, le=2000)
+    chunk_overlap_tokens: int = Field(default=100, ge=0, le=500)
 
 
 class IndexedChunk(BaseModel):
@@ -107,8 +107,8 @@ class RunIngestionIndexingInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     documents: list[IngestionDocument]
-    chunk_size_tokens: int = Field(default=600, ge=1, le=1200)
-    chunk_overlap_tokens: int = Field(default=80, ge=0, le=400)
+    chunk_size_tokens: int = Field(default=1000, ge=1, le=2000)
+    chunk_overlap_tokens: int = Field(default=100, ge=0, le=500)
 
 
 class IngestionIndexingResult(BaseModel):

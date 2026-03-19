@@ -5,6 +5,7 @@ description = "Internal Knowledge Assistant backend scaffold"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.116.0,<1.0.0",
+    "nltk>=3.9,<4.0",
     "pydantic>=2.9.0,<3.0.0",
     "python-decouple>=3.8,<4.0",
     "qdrant-client>=1.11.0,<2.0.0",

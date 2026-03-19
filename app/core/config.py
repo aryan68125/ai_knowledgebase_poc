@@ -37,8 +37,8 @@ class Settings(BaseModel):
     teams_source_name: str = Field(default="Teams")
     teams_project_key: str = Field(default="KB")
     teams_confidentiality: str = Field(default="internal")
-    static_chat_data_dir: str = Field(default="app/data/chat_data")
-    static_documents_dir: str = Field(default="app/data/documents")
+    data_base_dir: str = Field(default="app/data")
+    data_scan_directories: list[str] = Field(default_factory=lambda: ["chat_data", "documents"])
     static_project_key: str = Field(default="KB")
     static_confidentiality: str = Field(default="internal")
     hf_llm_enabled: bool = Field(default=True)
@@ -55,6 +55,10 @@ class Settings(BaseModel):
     vector_db_collection_name: str = Field(default="knowledgebase_chunks")
     vector_db_dimension: int = Field(default=384, ge=16, le=4096)
     vector_db_top_k: int = Field(default=8, ge=1, le=50)
+    hf_embedding_model_id: str = Field(default="sentence-transformers/all-MiniLM-L6-v2")
+    hf_embedding_url: str = Field(
+        default="https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2/pipeline/feature-extraction"
+    )
 
     @classmethod
     def from_env(cls, search_path: Path | str | None = None) -> "Settings":
@@ -179,16 +183,20 @@ class Settings(BaseModel):
                 default=os.getenv("TEAMS_CONFIDENTIALITY", "internal"),
                 cast=str,
             ),
-            static_chat_data_dir=decouple_config(
-                "STATIC_CHAT_DATA_DIR",
-                default=os.getenv("STATIC_CHAT_DATA_DIR", "app/data/chat_data"),
+            data_base_dir=decouple_config(
+                "DATA_BASE_DIR",
+                default=os.getenv("DATA_BASE_DIR", "app/data"),
                 cast=str,
             ),
-            static_documents_dir=decouple_config(
-                "STATIC_DOCUMENTS_DIR",
-                default=os.getenv("STATIC_DOCUMENTS_DIR", "app/data/documents"),
-                cast=str,
-            ),
+            data_scan_directories=[
+                d.strip()
+                for d in decouple_config(
+                    "DATA_SCAN_DIRECTORIES",
+                    default=os.getenv("DATA_SCAN_DIRECTORIES", "chat_data,documents"),
+                    cast=str,
+                ).split(",")
+                if d.strip()
+            ],
             static_project_key=decouple_config(
                 "STATIC_PROJECT_KEY",
                 default=os.getenv("STATIC_PROJECT_KEY", "KB"),
@@ -261,6 +269,22 @@ class Settings(BaseModel):
                 "VECTOR_DB_TOP_K",
                 default=os.getenv("VECTOR_DB_TOP_K", "8"),
                 cast=int,
+            ),
+            hf_embedding_model_id=decouple_config(
+                "HF_EMBEDDING_MODEL_ID",
+                default=os.getenv(
+                    "HF_EMBEDDING_MODEL_ID",
+                    "sentence-transformers/all-MiniLM-L6-v2",
+                ),
+                cast=str,
+            ),
+            hf_embedding_url=decouple_config(
+                "HF_EMBEDDING_URL",
+                default=os.getenv(
+                    "HF_EMBEDDING_URL",
+                    "https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2/pipeline/feature-extraction",
+                ),
+                cast=str,
             ),
         )
 

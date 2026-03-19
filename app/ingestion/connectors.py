@@ -122,11 +122,11 @@ class _UrllibGraphTransport:
 # NOTE:
 # Third-party integrations are intentionally paused for now per product direction.
 # This local connector is the active ingestion path so the app can serve deterministic
-# knowledge from repository-managed static files.
-class LocalChatDataConnector(BaseConnector):
-    """Ingest chat messages from local JSON files under app/data/chat_data."""
+# knowledge from repository-managed static files across configured directories.
+class LocalDirectoryConnector(BaseConnector):
+    """Ingest local .json and .docx files from configured data directories."""
 
-    source_type = SourceType.TEAMS
+    source_type = SourceType.SHAREPOINT
 
     def __init__(
         self,
@@ -137,48 +137,78 @@ class LocalChatDataConnector(BaseConnector):
         self._now_provider = now_provider or _utc_now
 
     def fetch_documents(self, mode: ConnectorMode) -> ConnectorFetchResult:
-        """Load and normalize all local chat JSON messages into ingestion documents."""
+        """Load and normalize files from all configured local directories."""
 
         try:
-            data_directory = Path(self._settings.static_chat_data_dir)
+            base_directory = Path(self._settings.data_base_dir)
+            
             ATHENA_LOGGER.info(
                 module="app.ingestion.connectors",
-                class_name="LocalChatDataConnector",
+                class_name="LocalDirectoryConnector",
                 method="fetch_documents",
-                message="Local chat data ingestion started",
-                extra={"mode": mode.value, "data_directory": str(data_directory)},
+                message="Local directory ingestion started",
+                extra={
+                    "mode": mode.value, 
+                    "base_directory": str(base_directory),
+                    "scan_directories": self._settings.data_scan_directories
+                },
             )
-            if not data_directory.exists():
+
+            if not base_directory.exists():
                 ATHENA_LOGGER.warning(
                     module="app.ingestion.connectors",
-                    class_name="LocalChatDataConnector",
+                    class_name="LocalDirectoryConnector",
                     method="fetch_documents",
-                    message="Local chat data directory does not exist",
-                    extra={"data_directory": str(data_directory)},
+                    message="Local base directory does not exist",
+                    extra={"base_directory": str(base_directory)},
                 )
                 return ConnectorFetchResult(documents=[])
 
             documents: list[IngestionDocument] = []
-            for file_path in sorted(data_directory.glob("*.json")):
-                documents.extend(self._documents_from_chat_file(file_path=file_path))
+            
+            for sub_dir in self._settings.data_scan_directories:
+                clean_sub_dir = sub_dir.strip().strip("/")
+                target_dir = base_directory / clean_sub_dir
+                
+                if not target_dir.exists():
+                    ATHENA_LOGGER.warning(
+                        module="app.ingestion.connectors",
+                        class_name="LocalDirectoryConnector",
+                        method="fetch_documents",
+                        message="Configured scan directory does not exist",
+                        extra={"target_dir": str(target_dir)},
+                    )
+                    continue
+                    
+                for file_path in sorted(target_dir.iterdir()):
+                    if not file_path.is_file():
+                        continue
+                        
+                    ext = file_path.suffix.lower()
+                    if ext == ".json":
+                        documents.extend(self._documents_from_chat_file(file_path=file_path))
+                    elif ext == ".docx":
+                        doc = self._document_from_docx_file(file_path=file_path)
+                        if doc:
+                            documents.append(doc)
 
             ATHENA_LOGGER.info(
                 module="app.ingestion.connectors",
-                class_name="LocalChatDataConnector",
+                class_name="LocalDirectoryConnector",
                 method="fetch_documents",
-                message="Local chat data ingestion completed",
+                message="Local directory ingestion completed",
                 extra={"documents_fetched": len(documents), "mode": mode.value},
             )
             return ConnectorFetchResult(documents=documents)
         except Exception as exc:
             ATHENA_LOGGER.error(
                 module="app.ingestion.connectors",
-                class_name="LocalChatDataConnector",
+                class_name="LocalDirectoryConnector",
                 method="fetch_documents",
-                message="Local chat data ingestion failed",
+                message="Local directory ingestion failed",
                 extra={"error": str(exc), "mode": mode.value},
             )
-            raise Exception(f"[LocalChatDataConnector.fetch_documents] {str(exc)}") from exc
+            raise Exception(f"[LocalDirectoryConnector.fetch_documents] {str(exc)}") from exc
 
     def _documents_from_chat_file(self, file_path: Path) -> list[IngestionDocument]:
         """Convert one chat JSON export file into normalized ingestion documents."""
@@ -212,13 +242,13 @@ class LocalChatDataConnector(BaseConnector):
                 documents.append(
                     IngestionDocument(
                         metadata=IngestionMetadata(
-                            source_type=self.source_type,
+                            source_type=SourceType.TEAMS,
                             document_id=message_id,
                             timestamp=timestamp,
                             author=author,
                             project_key=self._settings.static_project_key,
                             confidentiality=self._settings.static_confidentiality,
-                            source_name=f"Local Chat Data / {file_path.name}",
+                            source_name=f"Local Data / {file_path.parent.name}/{file_path.name}",
                             title=subject or f"Chat message {message_id}",
                         ),
                         text=text,
@@ -227,7 +257,7 @@ class LocalChatDataConnector(BaseConnector):
 
             ATHENA_LOGGER.debug(
                 module="app.ingestion.connectors",
-                class_name="LocalChatDataConnector",
+                class_name="LocalDirectoryConnector",
                 method="_documents_from_chat_file",
                 message="Local chat file normalized",
                 extra={"file_path": str(file_path), "documents_fetched": len(documents)},
@@ -236,86 +266,43 @@ class LocalChatDataConnector(BaseConnector):
         except Exception as exc:
             ATHENA_LOGGER.error(
                 module="app.ingestion.connectors",
-                class_name="LocalChatDataConnector",
+                class_name="LocalDirectoryConnector",
                 method="_documents_from_chat_file",
                 message="Failed to normalize local chat file",
                 extra={"file_path": str(file_path), "error": str(exc)},
             )
-            raise Exception(f"[LocalChatDataConnector._documents_from_chat_file] {str(exc)}") from exc
+            raise Exception(f"[LocalDirectoryConnector._documents_from_chat_file] {str(exc)}") from exc
 
-
-# NOTE:
-# Third-party document platforms are also paused for now.
-# We ingest local .docx files so query answers remain grounded in project documents.
-class LocalDocumentsConnector(BaseConnector):
-    """Ingest local .docx files under app/data/documents."""
-
-    source_type = SourceType.SHAREPOINT
-
-    def __init__(self, settings: Settings | None = None) -> None:
-        self._settings = settings or SETTINGS
-
-    def fetch_documents(self, mode: ConnectorMode) -> ConnectorFetchResult:
-        """Load all local .docx files and convert them into ingestion documents."""
+    def _document_from_docx_file(self, file_path: Path) -> IngestionDocument | None:
+        """Extract text content from .docx and return an ingestion document."""
 
         try:
-            data_directory = Path(self._settings.static_documents_dir)
-            ATHENA_LOGGER.info(
-                module="app.ingestion.connectors",
-                class_name="LocalDocumentsConnector",
-                method="fetch_documents",
-                message="Local documents ingestion started",
-                extra={"mode": mode.value, "data_directory": str(data_directory)},
+            text = self._extract_docx_text(file_path=file_path)
+            if not text:
+                return None
+            timestamp = datetime.fromtimestamp(file_path.stat().st_mtime, tz=timezone.utc)
+            return IngestionDocument(
+                metadata=IngestionMetadata(
+                    source_type=SourceType.SHAREPOINT,
+                    document_id=file_path.stem,
+                    timestamp=timestamp,
+                    author="local-documents-loader",
+                    project_key=self._settings.static_project_key,
+                    confidentiality=self._settings.static_confidentiality,
+                    source_name=f"Local Data / {file_path.parent.name}/{file_path.name}",
+                    title=file_path.stem,
+                ),
+                text=text,
             )
-            if not data_directory.exists():
-                ATHENA_LOGGER.warning(
-                    module="app.ingestion.connectors",
-                    class_name="LocalDocumentsConnector",
-                    method="fetch_documents",
-                    message="Local documents directory does not exist",
-                    extra={"data_directory": str(data_directory)},
-                )
-                return ConnectorFetchResult(documents=[])
-
-            documents: list[IngestionDocument] = []
-            for file_path in sorted(data_directory.glob("*.docx")):
-                text = self._extract_docx_text(file_path=file_path)
-                if not text:
-                    continue
-                timestamp = datetime.fromtimestamp(file_path.stat().st_mtime, tz=timezone.utc)
-                documents.append(
-                    IngestionDocument(
-                        metadata=IngestionMetadata(
-                            source_type=self.source_type,
-                            document_id=file_path.stem,
-                            timestamp=timestamp,
-                            author="local-documents-loader",
-                            project_key=self._settings.static_project_key,
-                            confidentiality=self._settings.static_confidentiality,
-                            source_name=f"Local Documents / {file_path.name}",
-                            title=file_path.stem,
-                        ),
-                        text=text,
-                    )
-                )
-
-            ATHENA_LOGGER.info(
-                module="app.ingestion.connectors",
-                class_name="LocalDocumentsConnector",
-                method="fetch_documents",
-                message="Local documents ingestion completed",
-                extra={"documents_fetched": len(documents), "mode": mode.value},
-            )
-            return ConnectorFetchResult(documents=documents)
         except Exception as exc:
             ATHENA_LOGGER.error(
                 module="app.ingestion.connectors",
-                class_name="LocalDocumentsConnector",
-                method="fetch_documents",
-                message="Local documents ingestion failed",
-                extra={"error": str(exc), "mode": mode.value},
+                class_name="LocalDirectoryConnector",
+                method="_document_from_docx_file",
+                message="Failed to normalize local document file",
+                extra={"file_path": str(file_path), "error": str(exc)},
             )
-            raise Exception(f"[LocalDocumentsConnector.fetch_documents] {str(exc)}") from exc
+            raise Exception(f"[LocalDirectoryConnector._document_from_docx_file] {str(exc)}") from exc
 
     def _extract_docx_text(self, file_path: Path) -> str:
         """Extract text content from .docx by reading word/document.xml."""
@@ -331,7 +318,7 @@ class LocalDocumentsConnector(BaseConnector):
             )
             ATHENA_LOGGER.debug(
                 module="app.ingestion.connectors",
-                class_name="LocalDocumentsConnector",
+                class_name="LocalDirectoryConnector",
                 method="_extract_docx_text",
                 message="Extracted text from local document",
                 extra={"file_path": str(file_path), "text_length": len(extracted_text)},
@@ -340,12 +327,12 @@ class LocalDocumentsConnector(BaseConnector):
         except Exception as exc:
             ATHENA_LOGGER.error(
                 module="app.ingestion.connectors",
-                class_name="LocalDocumentsConnector",
+                class_name="LocalDirectoryConnector",
                 method="_extract_docx_text",
                 message="Failed to extract text from local document",
                 extra={"file_path": str(file_path), "error": str(exc)},
             )
-            raise Exception(f"[LocalDocumentsConnector._extract_docx_text] {str(exc)}") from exc
+            raise Exception(f"[LocalDirectoryConnector._extract_docx_text] {str(exc)}") from exc
 
 
 # NOTE:

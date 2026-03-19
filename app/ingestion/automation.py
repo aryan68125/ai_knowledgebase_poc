@@ -18,8 +18,8 @@ class IngestionScheduler:
         pipeline: IngestionIndexingPipeline,
         mode: ConnectorMode,
         interval_seconds: int,
-        chunk_size_tokens: int = 600,
-        chunk_overlap_tokens: int = 80,
+        chunk_size_tokens: int = 1000,
+        chunk_overlap_tokens: int = 100,
     ) -> None:
         self._pipeline = pipeline
         self._mode = mode
@@ -158,6 +158,13 @@ class IngestionScheduler:
                     "chunks_indexed": _safe_value(result, "chunks_indexed"),
                 },
             )
+            
+            print(f"\n==================================================")
+            print(f"✅ INGESTION IS COMPLETED")
+            print(f"   Documents Processed: {_safe_value(result, 'documents_processed')}")
+            print(f"   Chunks Indexed: {_safe_value(result, 'chunks_indexed')}")
+            print(f"==================================================\n")
+            
             return result
         except Exception as exc:
             ATHENA_LOGGER.error(

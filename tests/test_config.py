@@ -36,8 +36,8 @@ def test_settings_from_env_reads_values_from_dotenv_file(tmp_path: Path) -> None
                 "TEAMS_SOURCE_NAME=Teams Platform Channel",
                 "TEAMS_PROJECT_KEY=KB",
                 "TEAMS_CONFIDENTIALITY=internal",
-                "STATIC_CHAT_DATA_DIR=app/data/chat_data",
-                "STATIC_DOCUMENTS_DIR=app/data/documents",
+                "DATA_BASE_DIR=app/data/base",
+                "DATA_SCAN_DIRECTORIES=dir1,dir2",
                 "STATIC_PROJECT_KEY=KB",
                 "STATIC_CONFIDENTIALITY=internal",
                 "HF_LLM_ENABLED=true",
@@ -81,8 +81,8 @@ def test_settings_from_env_reads_values_from_dotenv_file(tmp_path: Path) -> None
     assert settings.teams_source_name == "Teams Platform Channel"
     assert settings.teams_project_key == "KB"
     assert settings.teams_confidentiality == "internal"
-    assert settings.static_chat_data_dir == "app/data/chat_data"
-    assert settings.static_documents_dir == "app/data/documents"
+    assert settings.data_base_dir == "app/data/base"
+    assert settings.data_scan_directories == ["dir1", "dir2"]
     assert settings.static_project_key == "KB"
     assert settings.static_confidentiality == "internal"
     assert settings.hf_llm_enabled is True

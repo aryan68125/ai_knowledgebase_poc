@@ -91,13 +91,14 @@ class GenerateAnswerCommand(BaseCommand[GenerateAnswerInput, QueryAnswer]):
                         query=input_model.query,
                         context_chunks=llm_context_chunks,
                     )
-                    summary, detailed_explanation = self._parse_llm_output(
+                    summary, detailed_explanation, model_thinking = self._parse_llm_output(
                         llm_output=llm_output,
                         fallback_detail_lines=detail_lines,
                     )
                     response = QueryAnswer(
                         summary=summary,
                         detailed_explanation=detailed_explanation,
+                        model_thinking=model_thinking,
                         sources=source_lines,
                     )
                     ATHENA_LOGGER.info(
@@ -130,8 +131,9 @@ class GenerateAnswerCommand(BaseCommand[GenerateAnswerInput, QueryAnswer]):
                 )
 
             fallback_response = QueryAnswer(
-                summary="Answer generated from retrieved internal sources",
-                detailed_explanation="\n".join(detail_lines),
+                summary="Relevant context retrieved from Knowledgebase",
+                detailed_explanation=f"Found {len(source_lines)} relevant documents. However, the AI reasoning engine is currently offline or unreachable, so a synthesized answer cannot be generated right now. Please refer to the raw sources listed below.",
+                model_thinking=None,
                 sources=source_lines,
             )
             ATHENA_LOGGER.info(
@@ -156,18 +158,22 @@ class GenerateAnswerCommand(BaseCommand[GenerateAnswerInput, QueryAnswer]):
         self,
         llm_output: str,
         fallback_detail_lines: list[str],
-    ) -> tuple[str, str]:
+    ) -> tuple[str, str, str | None]:
         """Parse LLM output into response contract fields."""
 
-        cleaned_output = self._strip_reasoning_text(llm_output)
+        cleaned_output, global_think = self._extract_and_strip_reasoning(llm_output)
         parsed = self._extract_json_object(cleaned_output)
         if parsed is not None:
-            summary = self._strip_reasoning_text(str(parsed.get("summary", ""))).strip()
-            detailed_explanation = self._strip_reasoning_text(
-                str(parsed.get("detailed_explanation", ""))
-            ).strip()
-            if summary and detailed_explanation:
-                return summary, detailed_explanation
+            summary, sum_think = self._extract_and_strip_reasoning(str(parsed.get("summary", "")))
+            detail, det_think = self._extract_and_strip_reasoning(str(parsed.get("detailed_explanation", "")))
+            summary = summary.strip()
+            detail = detail.strip()
+            
+            all_thinks = [t for t in (global_think, sum_think, det_think) if t]
+            model_thinking = "\n\n".join(all_thinks) if all_thinks else None
+
+            if summary and detail:
+                return summary, detail, model_thinking
 
         if parsed is None:
             ATHENA_LOGGER.debug(
@@ -180,9 +186,9 @@ class GenerateAnswerCommand(BaseCommand[GenerateAnswerInput, QueryAnswer]):
         normalized_text = " ".join(cleaned_output.split()).strip()
         if normalized_text:
             summary = normalized_text[:220]
-            return summary, cleaned_output
+            return summary, cleaned_output, global_think
 
-        return "Answer generated from retrieved internal sources", "\n".join(fallback_detail_lines)
+        return "Answer generated from retrieved internal sources", "\n".join(fallback_detail_lines), global_think
 
     def _extract_json_object(self, text: str) -> dict[str, object] | None:
         """Extract best-effort JSON object from model output text."""
@@ -229,13 +235,25 @@ class GenerateAnswerCommand(BaseCommand[GenerateAnswerInput, QueryAnswer]):
 
         return candidates
 
-    def _strip_reasoning_text(self, text: str) -> str:
-        """Remove chain-of-thought tags and markdown fences from model output."""
+    def _extract_and_strip_reasoning(self, text: str) -> tuple[str, str | None]:
+        """Extract and remove chain-of-thought tags and markdown fences from model output."""
 
-        without_think = re.sub(r"<think>.*?</think>", "", text, flags=re.IGNORECASE | re.DOTALL)
-        without_fences = re.sub(r"```(?:json)?", "", without_think, flags=re.IGNORECASE)
+        thinkings = []
+        for match in re.finditer(r"<think>(.*?)</think>", text, flags=re.IGNORECASE | re.DOTALL):
+            if match.group(1).strip():
+                thinkings.append(match.group(1).strip())
+
+        cleaned = re.sub(r"<think>.*?</think>", "", text, flags=re.IGNORECASE | re.DOTALL)
+        
+        unclosed = re.search(r"<think>(.*)", cleaned, flags=re.IGNORECASE | re.DOTALL)
+        if unclosed:
+            if unclosed.group(1).strip():
+                thinkings.append(unclosed.group(1).strip())
+            cleaned = cleaned[:unclosed.start()]
+
+        without_fences = re.sub(r"```(?:json)?", "", cleaned, flags=re.IGNORECASE)
         without_fences = without_fences.replace("```", "")
-        return without_fences.strip()
+        return without_fences.strip(), ("\n\n".join(thinkings) if thinkings else None)
 
 
 class _HuggingFaceClientProtocol(Protocol):

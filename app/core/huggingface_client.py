@@ -115,8 +115,11 @@ class HuggingFaceChatClient:
                     {
                         "role": "system",
                         "content": (
-                            "You are a retrieval-grounded assistant. "
-                            "Do not invent facts outside supplied context."
+                            "You are a highly precise, retrieval-grounded assistant. "
+                            "Do not invent facts outside supplied context. "
+                            "Your answers MUST be extremely short, precise, and accurate. "
+                            "Provide the exact requested numerical answer or factual statement in 1-2 sentences maximum. "
+                            "Do not write expansive paragraphs."
                         ),
                     },
                     {"role": "user", "content": user_message},

@@ -24,4 +24,5 @@ class QueryAnswer(BaseModel):
 
     summary: str
     detailed_explanation: str
+    model_thinking: str | None = None
     sources: list[str]
