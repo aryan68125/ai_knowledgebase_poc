@@ -32,6 +32,13 @@ class HashTokenEmbedder:
         """Embed text into a normalized dense vector."""
 
         try:
+            ATHENA_LOGGER.info(
+                module="app.core.text_embedder",
+                class_name="HashTokenEmbedder",
+                method="embed",
+                message="[EMBEDDER] Using LOCAL fallback (HashTokenEmbedder) — HF_API_TOKEN is not set",
+                extra={"text_length": len(text), "dimension": self._dimension},
+            )
             ATHENA_LOGGER.debug(
                 module="app.core.text_embedder",
                 class_name="HashTokenEmbedder",
@@ -106,6 +113,13 @@ class HuggingFaceEmbedder:
     def embed(self, text: str) -> list[float]:
         """Embed a single text by calling the HuggingFace Inference API."""
 
+        ATHENA_LOGGER.info(
+            module="app.core.text_embedder",
+            class_name="HuggingFaceEmbedder",
+            method="embed",
+            message="[EMBEDDER] Using REMOTE HuggingFace Inference API",
+            extra={"model_id": self._model_id, "text_length": len(text)},
+        )
         return self.embed_many([text])[0]
 
     def embed_many(self, texts: list[str], batch_size: int = 64) -> list[list[float]]:
