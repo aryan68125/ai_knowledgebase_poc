@@ -114,13 +114,14 @@ class GenerateAnswerCommand(BaseCommand[GenerateAnswerInput, QueryAnswer]):
                     # We intentionally keep deterministic fallback behavior so the API remains
                     # usable during local development and test runs where HF credentials may
                     # be unavailable, while still preferring DeepSeek-R1 whenever callable.
-                    ATHENA_LOGGER.warning(
+                    ATHENA_LOGGER.error(
                         module="app.commands.generate_answer_command",
                         class_name="GenerateAnswerCommand",
                         method="execute",
-                        message="Hugging Face answer generation failed; using deterministic fallback",
+                        message="[LLM GENERATION FAILED] Hugging Face answer generation failed; using deterministic fallback",
                         extra={"query": input_model.query, "error": str(llm_exc)},
                     )
+                    print(f"\n❌ [LLM ERROR] Hugging Face generation failed:\n   {llm_exc}\n")
             else:
                 ATHENA_LOGGER.info(
                     module="app.commands.generate_answer_command",
